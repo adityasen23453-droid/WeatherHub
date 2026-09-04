@@ -131,9 +131,3 @@ weather-hub/
    npm run build
    ```
 
----
-
-## 👨‍💻 Author
-
-* **Developer**: [Aditya Sen](https://github.com/adityasen23453-droid)
-* **Project**: TCS Technical Interview Master Blueprint — Project 2
