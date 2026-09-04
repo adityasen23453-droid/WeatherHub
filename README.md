@@ -81,7 +81,7 @@ weather-hub/
 
 ---
 
-## 🎓 Core TCS Interview Concepts Mastered
+## 🎓 Core Concepts 
 
 ### 1. React Virtual DOM & Reconciliation
 * **Concept**: Real DOM operations are computationally expensive because re-rendering triggers browser layout recalculation and repaint.
