@@ -1,7 +1,7 @@
 # ⛅ WeatherHub — Live Weather & Air Quality Intelligence
 
 > **Project 2 — Full-Stack Preparation Series**  
-> A high-performance, production-grade Weather & Air Quality Hub built with **React 19**, **Tailwind CSS**, and modern **RESTful API integration**.
+> A high-performance, responsive, production-ready Weather & Air Quality Hub built with **React 19**, **Tailwind CSS**, and modern **RESTful API integration**.
 
 [![React 19](https://img.shields.io/badge/React-19.2.8-blue.svg?logo=react)](https://react.dev/)
 [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind-CSS_v4-38B2AC.svg?logo=tailwind-css)](https://tailwindcss.com/)
@@ -108,7 +108,7 @@ weather-hub/
 
 ---
 
-## 🎓 Core Concepts Mastered
+## 🎓 Core Concepts
 
 ### 1. Separation of Concerns (Persistent Identity vs. Volatile State)
 * **Problem**: Storing static meteorological values (`temp: 31`, `condition: "Cloudy"`) in `localStorage` causes data staleness.
