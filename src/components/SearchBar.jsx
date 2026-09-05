@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, MapPin, X, Loader2 } from 'lucide-react';
+import { Search, MapPin, X, Loader2, LocateFixed } from 'lucide-react';
 
 /**
  * SearchBar Component
@@ -8,9 +8,11 @@ import { Search, MapPin, X, Loader2 } from 'lucide-react';
  * 
  * @param {object} props
  * @param {Function} props.onSearch - Callback function invoked with the validated city name
+ * @param {Function} props.onLocateMe - Callback for live GPS location lookup
  * @param {boolean} props.isLoading - Flag indicating an ongoing API request
+ * @param {boolean} props.isLocating - Flag indicating GPS geolocation in progress
  */
-export default function SearchBar({ onSearch, isLoading }) {
+export default function SearchBar({ onSearch, onLocateMe, isLoading, isLocating }) {
   // Local state to store the currently typed text inside the input box
   const [cityInput, setCityInput] = useState('');
 
@@ -64,7 +66,7 @@ export default function SearchBar({ onSearch, isLoading }) {
           onChange={(e) => setCityInput(e.target.value)}
           placeholder="Search any global city (e.g. New Delhi, London, Tokyo, New York)..."
           disabled={isLoading}
-          className="w-full pl-12 pr-28 py-4 bg-slate-900/90 border border-slate-700/80 rounded-2xl text-slate-100 placeholder-slate-400 text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all shadow-xl backdrop-blur-sm disabled:opacity-50"
+          className="w-full pl-12 pr-28 py-3.5 bg-black/35 border border-white/15 rounded-2xl text-slate-100 placeholder-slate-400 text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent transition-all shadow-2xl backdrop-blur-xl disabled:opacity-50"
         />
 
         {/* Clear Button (shown only when text is entered) */}
@@ -83,32 +85,50 @@ export default function SearchBar({ onSearch, isLoading }) {
         <button
           type="submit"
           disabled={!cityInput.trim() || isLoading}
-          className="absolute right-2.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-cyan-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
+          className="absolute right-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-medium text-xs sm:text-sm rounded-xl transition-all shadow-lg shadow-cyan-500/25 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5"
         >
           {isLoading ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
               <span className="hidden sm:inline">Searching</span>
             </>
           ) : (
             <>
-              <Search className="w-4 h-4" />
+              <Search className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Search</span>
             </>
           )}
         </button>
       </form>
 
-      {/* Quick City Shortcut Chips */}
-      <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1 text-xs no-scrollbar">
-        <span className="text-slate-400 font-medium whitespace-nowrap pl-1">Popular:</span>
+      {/* Quick City Shortcut Chips & Live Location */}
+      <div className="flex items-center gap-2 mt-2.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+        {/* Live GPS Chip */}
+        {onLocateMe && (
+          <button
+            type="button"
+            onClick={onLocateMe}
+            disabled={isLocating || isLoading}
+            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 hover:text-white rounded-full transition-all whitespace-nowrap cursor-pointer active:scale-95 text-[11px] backdrop-blur-md shadow-md disabled:opacity-50"
+            title="Use your real-time GPS location"
+          >
+            {isLocating ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <LocateFixed className="w-3 h-3" />
+            )}
+            <span>Live Location</span>
+          </button>
+        )}
+
+        <span className="text-slate-300 font-medium whitespace-nowrap pl-1 text-[11px]">Popular:</span>
         {popularCities.map((city) => (
           <button
             key={city}
             type="button"
             onClick={() => handleQuickCityClick(city)}
             disabled={isLoading}
-            className="px-3 py-1 bg-slate-900/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-cyan-400 rounded-full transition-all whitespace-nowrap cursor-pointer active:scale-95 disabled:opacity-50"
+            className="px-3 py-1 bg-black/30 hover:bg-white/15 border border-white/10 hover:border-white/20 text-slate-200 hover:text-white rounded-full transition-all whitespace-nowrap cursor-pointer active:scale-95 disabled:opacity-50 text-[11px] backdrop-blur-md"
           >
             {city}
           </button>

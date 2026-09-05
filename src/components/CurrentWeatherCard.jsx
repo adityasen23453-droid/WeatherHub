@@ -1,109 +1,102 @@
 import React from 'react';
-import { MapPin, ArrowUp, ArrowDown, Droplets, Wind, Eye } from 'lucide-react';
-import { convertTemp, renderWeatherIcon, getHeroGradient } from '../utils/weatherUtils';
+import { MapPin } from 'lucide-react';
+import { convertTemp, renderWeatherIcon } from '../utils/weatherUtils';
 
 /**
  * CurrentWeatherCard Component
  * 
- * Displays the hero weather card with location information, current temperature,
- * dynamic weather condition icons, min/max range, feels-like metric, and ambient gradient backdrops.
+ * Implements the clean, high-impact hero header directly modeled on the reference design:
+ * - Prominent City Title with location pin
+ * - Quick PM2.5 air quality badge
+ * - Weather condition headline ("Cloudy", "Clear", "Rain")
+ * - Dynamic temperature range & feels-like indicator ("25 ~ 32°C  Feels like 33°C")
+ * - Ultra-large minimalist temperature number ("28°C")
+ * - Floating glowing weather condition icon
  * 
  * @param {object} props
- * @param {object} props.data - Composite weather object from weatherService
- * @param {string} props.unit - Current temperature unit ('C' or 'F')
+ * @param {object} props.data - Composite weather data payload
+ * @param {string} props.unit - 'C' | 'F'
  */
-export default function CurrentWeatherCard({ data, unit }) {
+export default function CurrentWeatherCard({ data, unit, onLocateMe }) {
   if (!data || !data.current) return null;
 
-  const { location, current, todayExtremes, lastUpdated } = data;
-  const gradientClass = getHeroGradient(current.condition, current.isDay);
+  const { location, current, todayExtremes, airQuality } = data;
 
   return (
-    <div
-      className={`relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-br ${gradientClass} border shadow-2xl glass-card transition-all duration-500`}
-    >
-      {/* Top Bar: Location details and Day/Night badge */}
-      <div className="flex items-start justify-between">
+    <div className="w-full text-center sm:text-left pt-2 pb-4">
+      {/* Top Location Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2 text-cyan-400 mb-1">
-            <MapPin className="w-4 h-4" />
-            <span className="text-xs font-semibold uppercase tracking-wider">Current Location</span>
+          <div className="flex items-center justify-center sm:justify-start gap-1.5 text-white/90">
+            <h1 className="text-3xl sm:text-5xl font-bold tracking-tight drop-shadow-md">
+              {location.name}
+            </h1>
+            {location.admin1 && (
+              <span className="text-xl sm:text-2xl text-slate-300/80 font-normal">
+                , {location.admin1}
+              </span>
+            )}
           </div>
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-            {location.name}
-            {location.admin1 ? <span className="text-lg sm:text-2xl text-slate-400 font-normal">, {location.admin1}</span> : ''}
-          </h2>
-          <p className="text-sm text-slate-400 mt-0.5">
-            {location.country} • Updated at {lastUpdated}
-          </p>
+          <div className="flex items-center justify-center sm:justify-start gap-3 text-xs text-slate-300/80 mt-1">
+            <div className="flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{location.country} • Updated at {data.lastUpdated}</span>
+            </div>
+            {onLocateMe && (
+              <button
+                type="button"
+                onClick={onLocateMe}
+                className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-medium cursor-pointer transition-colors"
+              >
+                Turn on Location &gt;
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Day / Night Indicator Pill */}
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-medium text-slate-300">
-          <span className={`w-2 h-2 rounded-full ${current.isDay ? 'bg-amber-400 animate-pulse' : 'bg-indigo-400'}`} />
-          <span>{current.isDay ? 'Daytime' : 'Nighttime'}</span>
-        </div>
+        {/* Small PM 2.5 Badge (matching reference design) */}
+        {airQuality && (
+          <div className="flex justify-center sm:justify-end">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/60 backdrop-blur-md border border-white/10 text-xs text-slate-200 shadow-lg">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase">PM 2.5</span>
+              <strong className="text-white font-bold">{airQuality.pm25}</strong>
+              <span className={`w-2 h-2 rounded-full ${airQuality.category.badgeBg}`} />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Center Hero Section: Large Temperature & Condition Icon */}
-      <div className="my-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-        
-        {/* Main Temperature Display */}
-        <div className="flex items-baseline">
-          <span className="text-6xl sm:text-8xl font-black text-white tracking-tighter">
-            {convertTemp(current.temperature, unit)}
-          </span>
-          <span className="text-3xl sm:text-5xl font-light text-cyan-400 ml-1">
-            °{unit}
-          </span>
-        </div>
+      {/* Main Condition & Temp Section */}
+      <div className="mt-8 flex flex-col items-center sm:items-start">
+        {/* Weather Condition Name */}
+        <h2 className="text-2xl sm:text-3xl font-semibold text-white drop-shadow">
+          {current.description}
+        </h2>
 
-        {/* Condition Icon and Label */}
-        <div className="flex items-center gap-4 sm:flex-col sm:items-end">
-          <div className="p-3 sm:p-4 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 shadow-inner">
-            {renderWeatherIcon(current.icon, current.isDay, 'w-12 h-12 sm:w-16 sm:h-16')}
-          </div>
-          <div className="sm:text-right">
-            <span className="text-lg sm:text-xl font-bold text-white block">
-              {current.description}
+        {/* Temperature Range & Feels Like (e.g. 25 ~ 32°C  Feels like 33°C) */}
+        <p className="text-sm sm:text-base text-slate-300 mt-1 drop-shadow font-medium">
+          {convertTemp(todayExtremes.minTemp, unit)} ~ {convertTemp(todayExtremes.maxTemp, unit)}°{unit}
+          <span className="mx-2 text-slate-400">•</span>
+          Feels like {convertTemp(current.feelsLike, unit)}°{unit}
+        </p>
+
+        {/* Huge Hero Temperature & Condition Icon */}
+        <div className="mt-4 flex items-center justify-center sm:justify-start gap-8">
+          <div className="flex items-baseline">
+            <span className="text-7xl sm:text-9xl font-black text-white tracking-tighter drop-shadow-2xl">
+              {convertTemp(current.temperature, unit)}
             </span>
-            <span className="text-xs text-slate-400">
-              Feels like {convertTemp(current.feelsLike, unit)}°{unit}
+            <span className="text-4xl sm:text-6xl font-light text-cyan-300 ml-1 drop-shadow-lg">
+              °{unit}
             </span>
           </div>
-        </div>
 
-      </div>
-
-      {/* Bottom Row: Today's High/Low and quick micro-stats */}
-      <div className="pt-6 border-t border-white/10 flex flex-wrap items-center justify-between gap-4 text-xs sm:text-sm text-slate-300">
-        
-        {/* High / Low Temperature Pills */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300">
-            <ArrowUp className="w-3.5 h-3.5 text-rose-400" />
-            <span>High: <strong className="text-white">{convertTemp(todayExtremes.maxTemp, unit)}°{unit}</strong></span>
-          </div>
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300">
-            <ArrowDown className="w-3.5 h-3.5 text-blue-400" />
-            <span>Low: <strong className="text-white">{convertTemp(todayExtremes.minTemp, unit)}°{unit}</strong></span>
+          {/* Floating animated condition icon */}
+          <div className="p-4 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/15 shadow-2xl animate-pulse-subtle">
+            {renderWeatherIcon(current.icon, current.isDay, 'w-16 h-16 sm:w-20 sm:h-20')}
           </div>
         </div>
-
-        {/* Quick Micro-Metrics */}
-        <div className="flex items-center gap-4 text-slate-400">
-          <div className="flex items-center gap-1">
-            <Droplets className="w-4 h-4 text-cyan-400" />
-            <span>{current.humidity}% Humidity</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Wind className="w-4 h-4 text-cyan-400" />
-            <span>{current.windSpeed} km/h Wind</span>
-          </div>
-        </div>
-
       </div>
     </div>
   );
 }
-

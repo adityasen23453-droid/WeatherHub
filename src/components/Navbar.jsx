@@ -1,24 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { CloudSun, Clock, RefreshCw } from 'lucide-react';
+import {
+  CloudSun,
+  Clock,
+  RefreshCw,
+  MapPin,
+  LocateFixed,
+  Bookmark,
+  Sparkles,
+  Loader2,
+} from 'lucide-react';
 
 /**
  * Navbar Component
  * 
- * Header bar for the WeatherHub application.
- * Provides application branding, live digital clock, unit conversion toggle (°C / °F),
- * and quick link to the candidate's GitHub repository.
+ * High-aesthetic floating navigation bar:
+ * - Radiant multi-color border glow line effect
+ * - Gradient typography and glowing status indicators
+ * - Live GPS Geolocation button ("Locate Me")
+ * - Favorite City Management trigger button
+ * - °C / °F unit toggle and real-time seconds digital clock
  * 
  * @param {object} props
- * @param {string} props.unit - Current temperature unit ('C' or 'F')
- * @param {Function} props.onToggleUnit - Callback to toggle between Celsius and Fahrenheit
- * @param {Function} props.onRefresh - Callback to refresh current city weather
- * @param {boolean} props.isLoading - Whether data is actively being fetched
+ * @param {string} props.unit - 'C' | 'F'
+ * @param {Function} props.onToggleUnit - Unit toggle callback
+ * @param {Function} props.onRefresh - Refresh current city callback
+ * @param {Function} props.onLocateMe - Live GPS geolocation trigger callback
+ * @param {Function} props.onOpenCityManagement - Open City Management modal callback
+ * @param {string} props.currentCity - Currently active city
+ * @param {boolean} props.isLoading - Loading state
+ * @param {boolean} props.isLocating - Geolocation fetching state
  */
-export default function Navbar({ unit, onToggleUnit, onRefresh, isLoading }) {
-  // Local state to store live clock time string
+export default function Navbar({
+  unit,
+  onToggleUnit,
+  onRefresh,
+  onLocateMe,
+  onOpenCityManagement,
+  currentCity = 'New Delhi',
+  isLoading,
+  isLocating,
+}) {
   const [currentTime, setCurrentTime] = useState('');
 
-  // useEffect Hook: Sets up a 1-second interval timer to update the clock display
+  // Clock interval effect
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -27,80 +51,120 @@ export default function Navbar({ unit, onToggleUnit, onRefresh, isLoading }) {
       );
     };
 
-    updateTime(); // Initial invocation
-    const timerId = setInterval(updateTime, 1000); // Repeat every 1,000 milliseconds
-
-    // Cleanup function: Prevents memory leaks by clearing the timer on unmount
+    updateTime();
+    const timerId = setInterval(updateTime, 1000);
     return () => clearInterval(timerId);
   }, []);
 
   return (
-    <header className="sticky top-0 z-50 backdrop-blur-md bg-slate-950/80 border-b border-slate-800/80">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-40 px-3 sm:px-6 pt-3 pb-2 backdrop-blur-xl transition-all">
+      {/* Floating Pill Container with Glowing Gradient Border Line Effect */}
+      <div className="max-w-6xl mx-auto rounded-2xl sm:rounded-full bg-slate-950/70 border border-white/15 p-1.5 sm:px-5 sm:py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex flex-wrap items-center justify-between gap-3 relative before:absolute before:-inset-[1px] before:rounded-2xl sm:before:rounded-full before:bg-gradient-to-r before:from-cyan-500/30 before:via-blue-500/10 before:to-purple-500/30 before:-z-10 before:pointer-events-none">
         
-        {/* Brand Logo & Title */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <CloudSun className="w-6 h-6 text-white animate-pulse-subtle" />
+        {/* Left: Brand Logo with Glowing Accent */}
+        <div className="flex items-center gap-2.5">
+          <div className="relative">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30 animate-float">
+              <CloudSun className="w-5 h-5 text-white" />
+            </div>
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400 ring-2 ring-slate-950 animate-ping" />
           </div>
+
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-lg text-white tracking-tight">WeatherHub</span>
-              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                React 19
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-200 bg-clip-text text-transparent">
+                WeatherHub
+              </span>
+              <span className="px-1.5 py-0.2 rounded-md bg-cyan-500/20 text-cyan-300 text-[10px] font-bold border border-cyan-400/30 uppercase tracking-widest">
+                PRO
               </span>
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">Live Weather & Air Quality Intelligence</p>
           </div>
         </div>
 
-        {/* Right Action Bar: Live Clock, Unit Switcher, Refresh, and GitHub */}
-        <div className="flex items-center gap-3">
+        {/* Center: Live City Pill & City Management Trigger */}
+        <div className="flex items-center gap-2">
+          
+          {/* Active City Indicator Button */}
+          <button
+            type="button"
+            onClick={onOpenCityManagement}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer shadow-md hover:border-cyan-400/40 active:scale-95 group"
+            title="Open City Management & Favorites"
+          >
+            <MapPin className="w-3.5 h-3.5 text-cyan-400 group-hover:animate-bounce" />
+            <span className="max-w-[110px] sm:max-w-[160px] truncate">{currentCity}</span>
+            <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">(Change)</span>
+          </button>
+
+          {/* Favorite Cities Management Button (with icon) */}
+          <button
+            type="button"
+            onClick={onOpenCityManagement}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-600/30 to-cyan-500/30 hover:from-blue-600/40 hover:to-cyan-500/40 border border-cyan-400/30 text-cyan-200 hover:text-white text-xs font-semibold transition-all shadow-md cursor-pointer active:scale-95"
+            title="Manage Favorite Cities"
+          >
+            <Bookmark className="w-3.5 h-3.5 text-cyan-300" />
+            <span className="hidden md:inline">Favorites</span>
+          </button>
+
+          {/* Live GPS "Locate Me" Button */}
+          <button
+            type="button"
+            onClick={onLocateMe}
+            disabled={isLocating}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-300 hover:text-white text-xs font-semibold transition-all shadow-md cursor-pointer active:scale-95 disabled:opacity-50"
+            title="Use current GPS live location"
+          >
+            {isLocating ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                <span className="hidden sm:inline">Locating...</span>
+              </>
+            ) : (
+              <>
+                <LocateFixed className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Live GPS</span>
+              </>
+            )}
+          </button>
+
+        </div>
+
+        {/* Right: Digital Clock, Unit Switcher, and Refresh Button */}
+        <div className="flex items-center gap-2">
           
           {/* Live Digital Clock */}
-          <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-lg">
-            <Clock className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="font-mono">{currentTime || '--:--:--'}</span>
+          <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-200 bg-white/10 border border-white/10 px-3 py-1 rounded-full backdrop-blur-md font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>{currentTime || '--:--:--'}</span>
           </div>
 
-          {/* Unit Toggle Button: Switch between Celsius (°C) and Fahrenheit (°F) */}
+          {/* Unit Toggle Button (°C / °F) */}
           <button
             type="button"
             onClick={onToggleUnit}
             title={`Switch to °${unit === 'C' ? 'F' : 'C'}`}
-            className="flex items-center bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:text-white cursor-pointer active:scale-95"
+            className="flex items-center bg-white/10 hover:bg-white/15 border border-white/15 hover:border-cyan-400/40 text-slate-200 px-3 py-1.5 rounded-full text-xs font-bold transition-all hover:text-white cursor-pointer active:scale-95 shadow-inner"
           >
-            <span className={unit === 'C' ? 'text-cyan-400 font-bold' : 'text-slate-500'}>°C</span>
-            <span className="mx-1 text-slate-600">/</span>
-            <span className={unit === 'F' ? 'text-cyan-400 font-bold' : 'text-slate-500'}>°F</span>
+            <span className={unit === 'C' ? 'text-cyan-400 font-black' : 'text-slate-400'}>°C</span>
+            <span className="mx-1 text-slate-500 font-normal">/</span>
+            <span className={unit === 'F' ? 'text-cyan-400 font-black' : 'text-slate-400'}>°F</span>
           </button>
 
-          {/* Refresh Data Button */}
+          {/* Refresh Current Weather Button */}
           <button
             type="button"
             onClick={onRefresh}
             disabled={isLoading}
             title="Refresh current weather data"
-            className="p-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+            className="p-2 rounded-full bg-white/10 hover:bg-white/15 border border-white/15 hover:border-white/25 text-slate-300 hover:text-white transition-all cursor-pointer disabled:opacity-50 active:scale-95"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-cyan-400' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-cyan-400' : ''}`} />
           </button>
 
-          {/* GitHub Repository Link */}
-          <a
-            href="https://github.com/adityasen23453-droid/WeatherHub"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="View Source on GitHub"
-            className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-          >
-            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-              <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-            </svg>
-            <span className="hidden sm:inline">GitHub</span>
-          </a>
-
         </div>
+
       </div>
     </header>
   );

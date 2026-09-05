@@ -2,186 +2,232 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import SearchBar from './components/SearchBar';
 import CurrentWeatherCard from './components/CurrentWeatherCard';
+import HourlyTemperatureWave from './components/HourlyTemperatureWave';
+import ForecastCard from './components/ForecastCard';
 import AirQualityCard from './components/AirQualityCard';
 import WeatherMetricsGrid from './components/WeatherMetricsGrid';
-import ForecastCard from './components/ForecastCard';
 import LoadingSkeleton from './components/LoadingSkeleton';
 import ErrorAlert from './components/ErrorAlert';
-import { getCompleteWeatherReport } from './services/weatherService';
+import CityManagementModal from './components/CityManagementModal';
+import {
+  getCompleteWeatherReport,
+  getCompleteWeatherReportByCoords,
+} from './services/weatherService';
 
 /**
  * App Component - Root Orchestrator
  * 
- * Manages the top-level application state using React 19 hooks (useState, useEffect),
- * coordinates asynchronous REST API calls, and handles conditional UI rendering
- * (loading skeletons, error alerts, and populated weather dashboards).
+ * Coordinates:
+ * - Real-time GPS location fetcher
+ * - Favorite City Management modal (persistent in localStorage)
+ * - 24-hour smooth draggable temperature wave
+ * - Maximum available extended daily predictions (up to 14 days)
+ * - Clean photorealistic background themes
  */
 export default function App() {
   // ==========================================
-  // 1. STATE DECLARATIONS (React useState Hook)
+  // 1. STATE DECLARATIONS
   // ==========================================
 
-  // weatherData: Holds the active weather, AQI, and forecast payload returned by the API
   const [weatherData, setWeatherData] = useState(null);
-
-  // isLoading: Boolean flag to track whether an asynchronous fetch request is pending
   const [isLoading, setIsLoading] = useState(true);
-
-  // errorMessage: Stores any error string encountered during fetching (null if healthy)
+  const [isLocating, setIsLocating] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
-
-  // currentCity: Name of the current active city being displayed (default: 'New Delhi')
   const [currentCity, setCurrentCity] = useState('New Delhi');
-
-  // tempUnit: Active temperature scale ('C' for Celsius, 'F' for Fahrenheit)
   const [tempUnit, setTempUnit] = useState('C');
+  const [isCityModalOpen, setIsCityModalOpen] = useState(false);
 
   // ==========================================
-  // 2. ASYNCHRONOUS DATA FETCHING LOGIC
+  // 2. ASYNCHRONOUS DATA FETCHING
   // ==========================================
 
   /**
-   * fetchWeather
-   * 
-   * Asynchronously queries coordinates, weather, and air quality metrics for a given city name.
-   * Utilizes try/catch/finally to guarantee that loading flags are consistently reset.
-   * 
-   * @param {string} targetCity - The city to look up
+   * Fetch weather by city name query
    */
   const fetchWeather = async (targetCity) => {
-    // Set loading indicator to true before firing the network request
     setIsLoading(true);
-    // Clear any leftover error message from previous attempts
     setErrorMessage(null);
 
     try {
-      // Await the asynchronous controller function from weatherService
       const report = await getCompleteWeatherReport(targetCity);
-      // On success, update weatherData and record the active city name
       setWeatherData(report);
       setCurrentCity(report.location.name);
     } catch (error) {
-      // On failure, record the readable error message
       console.error('Weather fetch failed:', error);
       setErrorMessage(error.message || 'Failed to fetch weather data. Please try again.');
     } finally {
-      // Regardless of success or failure, turn off the loading skeleton
       setIsLoading(false);
     }
   };
 
+  /**
+   * Real-time GPS Geolocation Fetcher
+   * Requests coordinates from browser and reverse geocodes to user's exact locality
+   */
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setIsLocating(true);
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const report = await getCompleteWeatherReportByCoords(latitude, longitude);
+          setWeatherData(report);
+          setCurrentCity(report.location.name);
+        } catch (err) {
+          console.error('GPS fetch error:', err);
+          setErrorMessage(err.message || 'Failed to fetch weather for your live GPS location.');
+        } finally {
+          setIsLocating(false);
+          setIsLoading(false);
+        }
+      },
+      (geoError) => {
+        console.warn('Geolocation error:', geoError);
+        setIsLocating(false);
+        setIsLoading(false);
+        let msg = 'Unable to retrieve your current location.';
+        if (geoError.code === geoError.PERMISSION_DENIED) {
+          msg = 'Location permission was denied. Please allow location access in your browser or search for a city.';
+        }
+        setErrorMessage(msg);
+      },
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
+  };
+
   // ==========================================
-  // 3. LIFECYCLE HOOK (React useEffect Hook)
+  // 3. LIFECYCLE HOOK
   // ==========================================
 
-  /**
-   * useEffect with an empty dependency array `[]`.
-   * Triggers once immediately when the App component mounts into the real DOM.
-   * Loads the default starting city ('New Delhi') so the user isn't greeted with a blank screen.
-   */
   useEffect(() => {
     fetchWeather('New Delhi');
-  }, []); // Empty dependency array ensures this effect runs exactly once on mount
+  }, []);
 
   // ==========================================
-  // 4. EVENT HANDLERS
+  // 4. HANDLERS
   // ==========================================
 
-  /**
-   * Handler for user city search submissions from SearchBar
-   * @param {string} searchedCity 
-   */
   const handleSearch = (searchedCity) => {
     fetchWeather(searchedCity);
   };
 
-  /**
-   * Handler to refresh the currently viewed city
-   */
   const handleRefresh = () => {
     if (currentCity) {
       fetchWeather(currentCity);
     }
   };
 
-  /**
-   * Toggles the temperature scale between Celsius and Fahrenheit
-   */
   const handleToggleUnit = () => {
     setTempUnit((prevUnit) => (prevUnit === 'C' ? 'F' : 'C'));
   };
 
-  // ==========================================
-  // 5. JSX RENDERING
-  // ==========================================
+  const activeTheme = weatherData?.theme || 'night';
+  const backgroundUrl = `/backgrounds/${activeTheme}.jpg`;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-white relative overflow-hidden">
+    <div className="min-h-screen text-slate-100 relative overflow-x-hidden flex flex-col font-sans selection:bg-cyan-500 selection:text-white">
       
-      {/* Ambient background glow effects */}
-      <div className="fixed top-0 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="fixed bottom-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      {/* Dynamic Photorealistic Background Texture */}
+      <div
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat transition-all duration-1000 -z-30 transform scale-105"
+        style={{ backgroundImage: `url(${backgroundUrl})` }}
+      />
 
-      {/* Top Navigation Bar */}
+      {/* Cinematic Vignette & Ambient Gradient Overlays */}
+      <div className="fixed inset-0 bg-gradient-to-b from-black/40 via-slate-950/50 to-slate-950/85 -z-20 pointer-events-none" />
+      <div className="fixed inset-0 backdrop-blur-[2px] -z-10 pointer-events-none" />
+
+      {/* Cool Floating Navbar with Glowing Border Line Effect */}
       <Navbar
         unit={tempUnit}
         onToggleUnit={handleToggleUnit}
         onRefresh={handleRefresh}
+        onLocateMe={handleLocateMe}
+        onOpenCityManagement={() => setIsCityModalOpen(true)}
+        currentCity={currentCity}
         isLoading={isLoading}
+        isLocating={isLocating}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+      {/* Main Content Viewport */}
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 z-10 flex flex-col justify-between">
         
-        {/* Search Bar with Popular City Chips */}
-        <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+        {/* Floating Search Bar with Live Location & Popular Cities */}
+        <SearchBar
+          onSearch={handleSearch}
+          onLocateMe={handleLocateMe}
+          isLoading={isLoading}
+          isLocating={isLocating}
+        />
 
-        {/* Conditional Rendering State Engine */}
+        {/* State Display Engine */}
         {isLoading ? (
-          // 1. Loading State: Display animated skeleton placeholders
           <LoadingSkeleton />
         ) : errorMessage ? (
-          // 2. Error State: Display alert banner with retry buttons
           <ErrorAlert errorMessage={errorMessage} onRetry={fetchWeather} />
         ) : weatherData ? (
-          // 3. Success State: Display full dynamic dashboard
-          <div className="space-y-6">
+          <div className="space-y-6 animate-fadeIn">
             
-            {/* Top Row: Hero Current Weather Card + Air Quality Card */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <CurrentWeatherCard data={weatherData} unit={tempUnit} />
+            {/* 1. Hero Weather Header with 'Turn on Location >' option */}
+            <CurrentWeatherCard
+              data={weatherData}
+              unit={tempUnit}
+              onLocateMe={handleLocateMe}
+            />
+
+            {/* 2. Signature Feature: Smooth Draggable 24-Hour Temperature Wave Curve */}
+            <div className="glass-card rounded-3xl p-4 sm:p-6 border border-white/10 shadow-2xl backdrop-blur-xl">
+              <div className="flex items-center justify-between px-2 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  24-Hour Hourly Trajectory
+                </span>
+                <span className="text-xs text-slate-400">
+                  Drag & scroll horizontally to explore
+                </span>
               </div>
-              <div className="lg:col-span-1">
-                <AirQualityCard airQuality={weatherData.airQuality} />
-              </div>
+              <HourlyTemperatureWave
+                hourly={weatherData.hourly}
+                unit={tempUnit}
+                todayExtremes={weatherData.todayExtremes}
+              />
             </div>
 
-            {/* Middle Row: Atmospheric Metrics Grid (Wind, UV, Pressure, Sun) */}
+            {/* 3. Lower Section: Up to 14-Day Extended Daily Forecast + Air Quality Index */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+              {/* Left Column: Extended Daily Predictions (Up to 14 Days) */}
+              <ForecastCard forecast={weatherData.forecast} unit={tempUnit} />
+
+              {/* Right Column: Air Quality Index Breakdown */}
+              <AirQualityCard airQuality={weatherData.airQuality} />
+            </div>
+
+            {/* 4. Atmospheric Metrics Grid (Wind Compass, UV Index, Pressure, Sunrise/Sunset) */}
             <WeatherMetricsGrid
               current={weatherData.current}
               todayExtremes={weatherData.todayExtremes}
             />
-
-            {/* Bottom Row: 5-Day Extended Daily Forecast */}
-            <ForecastCard forecast={weatherData.forecast} unit={tempUnit} />
 
           </div>
         ) : null}
 
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 py-6 text-center text-xs text-slate-400 bg-slate-950/60 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div>
-            Built for <strong className="text-slate-300">TCS Technical Interview Excellence</strong> — Project 2
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-slate-400">Powered by React 19 • Tailwind CSS • Open-Meteo REST API</span>
-          </div>
-        </div>
-      </footer>
+      {/* Favorite Cities & City Management Modal (Matching Reference Design) */}
+      <CityManagementModal
+        isOpen={isCityModalOpen}
+        onClose={() => setIsCityModalOpen(false)}
+        onSelectCity={handleSearch}
+        currentCity={currentCity}
+        unit={tempUnit}
+      />
 
     </div>
   );

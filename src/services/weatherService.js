@@ -159,8 +159,8 @@ export async function fetchCityCoordinates(cityName) {
  * @returns {Promise<object>} Combined weather and air quality report
  */
 export async function fetchWeatherAndAirQuality(latitude, longitude, timezone = 'auto') {
-  // Construct the weather API endpoint requesting current variables and 7-day daily forecast
-  const weatherEndpoint = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max&timezone=${encodeURIComponent(
+  // Construct the weather API endpoint requesting current variables, maximum 14-day daily forecast, and 48-hour hourly series
+  const weatherEndpoint = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max&forecast_days=14&timezone=${encodeURIComponent(
     timezone
   )}`;
 
@@ -186,14 +186,30 @@ export async function fetchWeatherAndAirQuality(latitude, longitude, timezone = 
   const current = weatherData.current;
   const currentInterpretation = getWeatherInterpretation(current.weather_code);
 
-  // Process 5-day daily forecast from daily array
+  // Determine atmospheric theme: 'storm', 'sunset', 'night', 'day'
+  let theme = 'day';
+  if (['Rain', 'Thunderstorm', 'Drizzle'].includes(currentInterpretation.condition)) {
+    theme = 'storm';
+  } else if (!current.is_day) {
+    theme = 'night';
+  } else {
+    // Check if current hour is golden hour near sunset/sunrise
+    const nowHour = new Date().getHours();
+    if (nowHour >= 17 && nowHour <= 19) {
+      theme = 'sunset';
+    } else {
+      theme = 'day';
+    }
+  }
+
+  // Process maximum available daily forecast (up to 14 days)
   const daily = weatherData.daily;
   const forecast = [];
-  const daysToInclude = Math.min(5, daily.time.length);
+  const daysToInclude = daily.time.length;
 
   for (let i = 0; i < daysToInclude; i++) {
     const dateObj = new Date(daily.time[i]);
-    const dayName = i === 0 ? 'Today' : dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+    const dayName = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : dateObj.toLocaleDateString('en-US', { weekday: 'short' });
     const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const dayInterp = getWeatherInterpretation(daily.weather_code[i]);
 
@@ -208,7 +224,37 @@ export async function fetchWeatherAndAirQuality(latitude, longitude, timezone = 
       maxTemp: Math.round(daily.temperature_2m_max[i]),
       minTemp: Math.round(daily.temperature_2m_min[i]),
       uvIndex: daily.uv_index_max ? daily.uv_index_max[i] : null,
+      precipitationProb: daily.precipitation_probability_max ? daily.precipitation_probability_max[i] : null,
     });
+  }
+
+  // Process Hourly Forecast (up to next 24 consecutive hours for smooth horizontal trajectory)
+  const hourly = weatherData.hourly;
+  const hourlyPoints = [];
+  if (hourly && hourly.time) {
+    const currentTimeIso = current.time ? current.time.slice(0, 13) : '';
+    let startIndex = hourly.time.findIndex((t) => t.startsWith(currentTimeIso));
+    if (startIndex === -1) startIndex = 0;
+
+    const maxHours = Math.min(24, hourly.time.length - startIndex);
+    for (let i = 0; i < maxHours; i++) {
+      const idx = startIndex + i;
+      const tIso = hourly.time[idx];
+      const hourPart = tIso.split('T')[1]?.slice(0, 5) || '00:00';
+      const timeLabel = i === 0 ? 'Now' : hourPart;
+      const interp = getWeatherInterpretation(hourly.weather_code[idx]);
+
+      hourlyPoints.push({
+        time: timeLabel,
+        rawTime: tIso,
+        temp: Math.round(hourly.temperature_2m[idx]),
+        rainProb: hourly.precipitation_probability ? hourly.precipitation_probability[idx] : 0,
+        weatherCode: hourly.weather_code[idx],
+        condition: interp.condition,
+        icon: interp.icon,
+        description: interp.description,
+      });
+    }
   }
 
   // Process Air Quality metrics with default fallbacks
@@ -216,6 +262,7 @@ export async function fetchWeatherAndAirQuality(latitude, longitude, timezone = 
   const aqiCategory = getAqiCategory(currentAqi);
 
   return {
+    theme,
     current: {
       temperature: Math.round(current.temperature_2m),
       feelsLike: Math.round(current.apparent_temperature),
@@ -248,19 +295,28 @@ export async function fetchWeatherAndAirQuality(latitude, longitude, timezone = 
       category: aqiCategory,
     },
     forecast,
+    hourly: hourlyPoints,
   };
 }
 
-/**
- * Unified Controller Function: fetchWeatherData
- * Takes a city name, geocodes it, and retrieves comprehensive weather & AQI
- * 
- * @param {string} cityName - Name of the target city
- * @returns {Promise<object>} Complete composite payload for the UI state
- */
-export async function getCompleteWeatherReport(cityName) {
-  // Step 1: Geocode city name to coordinates
-  const location = await fetchCityCoordinates(cityName);
+export async function getCompleteWeatherReport(target) {
+  let location;
+
+  // If target is already a resolved location object with coordinates, skip geocoding
+  if (typeof target === 'object' && target !== null && target.latitude && target.longitude) {
+    location = {
+      name: target.name,
+      country: target.country || '',
+      countryCode: target.countryCode || '',
+      latitude: target.latitude,
+      longitude: target.longitude,
+      admin1: target.admin1 || '',
+      timezone: target.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto',
+    };
+  } else {
+    // Otherwise geocode the city name string
+    location = await fetchCityCoordinates(String(target));
+  }
 
   // Step 2: Fetch weather and air quality for coordinates
   const weatherDetails = await fetchWeatherAndAirQuality(
@@ -276,4 +332,156 @@ export async function getCompleteWeatherReport(cityName) {
     lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   };
 }
+
+/**
+ * Reverse Geocodes GPS Coordinates (Latitude & Longitude) to City Name
+ * Uses BigDataCloud free client API with fallback to coordinates
+ * 
+ * @param {number} latitude
+ * @param {number} longitude
+ * @returns {Promise<object>}
+ */
+export async function reverseGeocode(latitude, longitude) {
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const cityName = data.locality || data.city || data.principalSubdivision || 'Current Location';
+      return {
+        name: cityName,
+        country: data.countryName || '',
+        countryCode: data.countryCode || '',
+        latitude,
+        longitude,
+        admin1: data.principalSubdivision || '',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto',
+      };
+    }
+  } catch (err) {
+    console.warn('Reverse geocoding network notice:', err);
+  }
+
+  return {
+    name: 'My Location',
+    country: '',
+    countryCode: '',
+    latitude,
+    longitude,
+    admin1: '',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto',
+  };
+}
+
+/**
+ * Controller Function: getCompleteWeatherReportByCoords
+ * Uses real-time GPS coordinates directly to load weather & air quality
+ * 
+ * @param {number} latitude
+ * @param {number} longitude
+ * @returns {Promise<object>}
+ */
+export async function getCompleteWeatherReportByCoords(latitude, longitude) {
+  const location = await reverseGeocode(latitude, longitude);
+  const weatherDetails = await fetchWeatherAndAirQuality(
+    latitude,
+    longitude,
+    location.timezone
+  );
+
+  return {
+    location,
+    ...weatherDetails,
+    lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+/**
+ * Default persistent list of favorite cities storing strictly location identity & coordinates.
+ * Notice: NO static weather metrics (temp, condition, etc.) are stored here!
+ */
+export const DEFAULT_FAVORITE_CITIES = [
+  {
+    id: 'musari_kudar',
+    name: 'Musari Kudar',
+    latitude: 22.75,
+    longitude: 86.15,
+    country: 'India',
+    admin1: 'Jharkhand',
+  },
+  {
+    id: 'jamshedpur',
+    name: 'Jamshedpur',
+    latitude: 22.8046,
+    longitude: 86.2029,
+    country: 'India',
+    admin1: 'Jharkhand',
+  },
+  {
+    id: 'new_delhi',
+    name: 'New Delhi',
+    latitude: 28.6139,
+    longitude: 77.209,
+    country: 'India',
+    admin1: 'Delhi',
+  },
+];
+
+/**
+ * Fetches fresh, live current weather and daily extremes on-demand for a list of favorite cities.
+ * Separates persistent city identity (localStorage) from volatile live weather (API on-demand).
+ * 
+ * @param {Array<object>} cities - Array of { id, name, latitude, longitude, ... }
+ * @returns {Promise<Record<string, object>>} Map of city ID/name to fresh weather data
+ */
+export async function fetchLiveWeatherForCities(cities) {
+  if (!cities || cities.length === 0) return {};
+
+  const results = await Promise.all(
+    cities.map(async (city) => {
+      try {
+        const endpoint = `https://api.open-meteo.com/v1/forecast?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,apparent_temperature,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
+        const res = await fetch(endpoint);
+        if (!res.ok) return null;
+        const data = await res.json();
+        const current = data.current;
+        const daily = data.daily;
+        const interp = getWeatherInterpretation(current.weather_code);
+
+        return {
+          id: city.id || `${city.latitude}_${city.longitude}`,
+          name: city.name,
+          temp: Math.round(current.temperature_2m),
+          condition: interp.condition,
+          description: interp.description,
+          icon: interp.icon,
+          isDay: Boolean(current.is_day),
+          minTemp: daily?.temperature_2m_min?.[0] !== undefined
+            ? Math.round(daily.temperature_2m_min[0])
+            : Math.round(current.temperature_2m) - 3,
+          maxTemp: daily?.temperature_2m_max?.[0] !== undefined
+            ? Math.round(daily.temperature_2m_max[0])
+            : Math.round(current.temperature_2m) + 4,
+          fetchedAt: Date.now(),
+        };
+      } catch (err) {
+        console.warn(`Failed to fetch live weather for favorite city "${city.name}":`, err);
+        return null;
+      }
+    })
+  );
+
+  const weatherMap = {};
+  results.forEach((item) => {
+    if (item) {
+      if (item.id) weatherMap[item.id] = item;
+      weatherMap[item.name.toLowerCase()] = item;
+    }
+  });
+
+  return weatherMap;
+}
+
+
 
