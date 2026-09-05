@@ -200,6 +200,11 @@ export default function App() {
           onLocateMe={handleLocateMe}
           isLoading={isLoading}
           isLocating={isLocating}
+          userCoords={
+            weatherData?.location
+              ? { latitude: weatherData.location.latitude, longitude: weatherData.location.longitude }
+              : null
+          }
         />
 
         {/* State Display Engine */}

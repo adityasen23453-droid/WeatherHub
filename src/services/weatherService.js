@@ -105,47 +105,29 @@ export function getAqiCategory(aqi) {
   }
 }
 
+import { resolveLocation, reverseGeocodeLocation } from './locationService';
+
 /**
- * Step 1: Geocoding Function
- * Converts a city name string (e.g. "Tokyo", "London", "New Delhi") into
- * geographic coordinates (latitude, longitude, country, name).
+ * Geocoding Proxy Function
+ * Resolves location queries using dedicated locationService (MapTiler + Open-Meteo fallback)
  * 
  * @param {string} cityName - The query string entered by the user
- * @returns {Promise<object>} City metadata including latitude, longitude, and country
+ * @returns {Promise<object>} Normalized location object
  */
 export async function fetchCityCoordinates(cityName) {
-  const trimmed = cityName.trim();
+  const trimmed = cityName?.trim();
   if (!trimmed) {
-    throw new Error('Please enter a city name.');
+    throw new Error('Please enter a location name.');
   }
 
-  const endpoint = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
-    trimmed
-  )}&count=1&language=en&format=json`;
+  const { directMatch, candidates } = await resolveLocation(trimmed);
+  const location = directMatch || candidates[0];
 
-  const response = await fetch(endpoint);
-
-  // Check HTTP response status code (e.g., 200 OK vs 404/500)
-  if (!response.ok) {
-    throw new Error(`Geocoding service unavailable (HTTP ${response.status})`);
+  if (!location) {
+    throw new Error(`Location "${trimmed}" could not be found. Please check your spelling.`);
   }
 
-  const data = await response.json();
-
-  if (!data.results || data.results.length === 0) {
-    throw new Error(`City "${trimmed}" could not be found. Please check your spelling.`);
-  }
-
-  const result = data.results[0];
-  return {
-    name: result.name,
-    country: result.country,
-    countryCode: result.country_code,
-    latitude: result.latitude,
-    longitude: result.longitude,
-    admin1: result.admin1 || '',
-    timezone: result.timezone,
-  };
+  return location;
 }
 
 /**
@@ -305,16 +287,20 @@ export async function getCompleteWeatherReport(target) {
   // If target is already a resolved location object with coordinates, skip geocoding
   if (typeof target === 'object' && target !== null && target.latitude && target.longitude) {
     location = {
+      id: target.id || `${target.latitude}_${target.longitude}`,
       name: target.name,
+      fullName: target.fullName || target.name,
       country: target.country || '',
       countryCode: target.countryCode || '',
       latitude: target.latitude,
       longitude: target.longitude,
       admin1: target.admin1 || '',
+      admin2: target.admin2 || '',
+      type: target.type || 'locality',
       timezone: target.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto',
     };
   } else {
-    // Otherwise geocode the city name string
+    // Otherwise geocode the location query string
     location = await fetchCityCoordinates(String(target));
   }
 
@@ -333,61 +319,30 @@ export async function getCompleteWeatherReport(target) {
   };
 }
 
-/**
- * Reverse Geocodes GPS Coordinates (Latitude & Longitude) to City Name
- * Uses BigDataCloud free client API with fallback to coordinates
- * 
- * @param {number} latitude
- * @param {number} longitude
- * @returns {Promise<object>}
- */
 export async function reverseGeocode(latitude, longitude) {
-  try {
-    const res = await fetch(
-      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
-    );
-    if (res.ok) {
-      const data = await res.json();
-      const cityName = data.locality || data.city || data.principalSubdivision || 'Current Location';
-      return {
-        name: cityName,
-        country: data.countryName || '',
-        countryCode: data.countryCode || '',
-        latitude,
-        longitude,
-        admin1: data.principalSubdivision || '',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto',
-      };
-    }
-  } catch (err) {
-    console.warn('Reverse geocoding network notice:', err);
-  }
-
-  return {
-    name: 'My Location',
-    country: '',
-    countryCode: '',
-    latitude,
-    longitude,
-    admin1: '',
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto',
-  };
+  return reverseGeocodeLocation(latitude, longitude);
 }
 
 /**
  * Controller Function: getCompleteWeatherReportByCoords
- * Uses real-time GPS coordinates directly to load weather & air quality
+ * Uses real-time GPS coordinates or explicit location directly to load weather & air quality
  * 
  * @param {number} latitude
  * @param {number} longitude
+ * @param {object} [explicitLocation] - Optional pre-resolved normalized location
  * @returns {Promise<object>}
  */
-export async function getCompleteWeatherReportByCoords(latitude, longitude) {
-  const location = await reverseGeocode(latitude, longitude);
+export async function getCompleteWeatherReportByCoords(latitude, longitude, explicitLocation = null) {
+  let location = explicitLocation;
+  if (!location || !location.name) {
+    location = await reverseGeocodeLocation(latitude, longitude);
+  }
+
+  const timezone = location.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto';
   const weatherDetails = await fetchWeatherAndAirQuality(
     latitude,
     longitude,
-    location.timezone
+    timezone
   );
 
   return {
