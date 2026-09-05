@@ -1,12 +1,11 @@
 # ⛅ WeatherHub — Live Weather & Air Quality Intelligence
 
-> **Project 2 of TCS 14-Day 7-Project Full-Stack Preparation Series**  
+> **Project 2 — Full-Stack Preparation Series**  
 > A high-performance, production-grade Weather & Air Quality Hub built with **React 19**, **Tailwind CSS**, and modern **RESTful API integration**.
 
 [![React 19](https://img.shields.io/badge/React-19.2.8-blue.svg?logo=react)](https://react.dev/)
 [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind-CSS_v4-38B2AC.svg?logo=tailwind-css)](https://tailwindcss.com/)
 [![Vite 8](https://img.shields.io/badge/Bundler-Vite_8-646CFF.svg?logo=vite)](https://vite.dev/)
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717.svg?logo=github)](https://github.com/adityasen23453-droid/WeatherHub)
 
 ---
 
@@ -109,7 +108,7 @@ weather-hub/
 
 ---
 
-## 🎓 Core TCS Interview Concepts Mastered
+## 🎓 Core Concepts Mastered
 
 ### 1. Separation of Concerns (Persistent Identity vs. Volatile State)
 * **Problem**: Storing static meteorological values (`temp: 31`, `condition: "Cloudy"`) in `localStorage` causes data staleness.
@@ -163,9 +162,3 @@ weather-hub/
    npm run build
    ```
 
----
-
-## 👨‍💻 Author
-
-* **Developer**: [Aditya Sen](https://github.com/adityasen23453-droid)
-* **Project**: TCS Technical Interview Master Blueprint — Project 2
