@@ -133,7 +133,7 @@ export default function App() {
         }
         setErrorMessage(msg);
       },
-      { enableHighAccuracy: true, timeout: 12000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 

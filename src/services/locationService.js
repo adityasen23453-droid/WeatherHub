@@ -4,24 +4,25 @@
  * Dedicated Location & Geocoding Service Layer
  * 
  * Architecture:
- * - PRIMARY: MapTiler Cloud Geocoding API (with explicit POI, address, region, municipality types & proximity bias)
- * - FALLBACK: Open-Meteo Geocoding API (with multi-token address parsing, compound query handling & multi-criteria scoring)
- * - NO unrestricted public Nominatim client-side calls (avoids policy / rate-limit violations)
+ * - TIER 1: MapTiler Cloud Geocoding API (with explicit POI, address, region, municipality types & proximity bias)
+ * - TIER 2: Photon by Komoot (100% Free, Zero-Account, Open-Source OpenSearch Geocoder over OpenStreetMap)
+ * - TIER 3: Open-Meteo Geocoding API (Smart fallback with multi-token address parsing & population weighting)
+ * - TIER 4: Smart Parent Locality Fallback (Handles sub-neighborhoods like "Burmamines Jamshedpur" or "Bhuiyadih")
  * - Normalized Location Schema across the entire application
  * - Disambiguation support for multi-candidate queries
  */
 
 /**
  * @typedef {Object} NormalizedLocation
- * @property {string} id - Unique identifier (e.g. "poi.12345", "om_123456")
- * @property {string} name - Short display name (e.g. "Arka Jain University", "Mohanpur")
+ * @property {string} id - Unique identifier (e.g. "poi.12345", "photon_123", "om_123456")
+ * @property {string} name - Short display name (e.g. "Arka Jain University", "Mohanpur", "Burmamines")
  * @property {string} fullName - Complete geographic address
  * @property {number} latitude - Decimal latitude
  * @property {number} longitude - Decimal longitude
  * @property {string} country - Country name (e.g. "India")
  * @property {string} countryCode - ISO 2-letter country code (e.g. "IN")
  * @property {string} admin1 - Primary administrative division / State (e.g. "Jharkhand")
- * @property {string} admin2 - Secondary administrative division / District (e.g. "Saraikela Kharsawan")
+ * @property {string} admin2 - Secondary administrative division / District (e.g. "East Singhbhum")
  * @property {string} type - Feature category ("poi" | "municipality" | "locality" | "region" | "address" | "village")
  * @property {number} relevance - Confidence score between 0.0 and 1.0
  */
@@ -76,6 +77,60 @@ export function normalizeMapTilerFeature(feature) {
 }
 
 /**
+ * Normalizes a Photon by Komoot GeoJSON feature into a NormalizedLocation object
+ * @param {object} feature - Photon GeoJSON feature
+ * @returns {NormalizedLocation}
+ */
+export function normalizePhotonFeature(feature) {
+  const coords = feature.geometry?.coordinates || [0, 0];
+  const lon = Number(coords[0]);
+  const lat = Number(coords[1]);
+  const p = feature.properties || {};
+
+  const shortName = p.name || p.city || p.locality || p.district || 'Location';
+
+  const fullParts = [
+    p.name,
+    p.street,
+    p.suburb || p.district,
+    p.city,
+    p.state,
+    p.country,
+  ].filter(Boolean);
+
+  // Deduplicate adjacent identical names (e.g. "Mohanpur, Mohanpur")
+  const uniqueParts = fullParts.filter((item, idx, arr) => arr.indexOf(item) === idx);
+
+  const osmVal = p.osm_value || '';
+  const osmKey = p.osm_key || '';
+
+  const type =
+    osmVal === 'university' || osmVal === 'college' || osmKey === 'amenity'
+      ? 'poi'
+      : osmVal === 'state'
+      ? 'region'
+      : ['city', 'town'].includes(osmVal)
+      ? 'municipality'
+      : ['suburb', 'neighbourhood', 'village', 'hamlet', 'quarter'].includes(osmVal)
+      ? 'locality'
+      : 'place';
+
+  return {
+    id: `photon_${p.osm_type || 'W'}_${p.osm_id || `${lat.toFixed(4)}_${lon.toFixed(4)}`}`,
+    name: shortName,
+    fullName: uniqueParts.join(', ') || shortName,
+    latitude: lat,
+    longitude: lon,
+    country: p.country || '',
+    countryCode: (p.countrycode || '').toUpperCase(),
+    admin1: p.state || '',
+    admin2: p.district || p.city || '',
+    type,
+    relevance: 0.9,
+  };
+}
+
+/**
  * Normalizes an Open-Meteo search result into a NormalizedLocation object
  * @param {object} res - Open-Meteo geocoding result
  * @param {number} score - Computed relevance score
@@ -104,13 +159,9 @@ export function normalizeOpenMeteoResult(res, score = 70) {
 }
 
 /**
- * Primary Geocoder: MapTiler Cloud Geocoding API
- * Explicitly requests POI, addresses, municipalities, and regions with optional proximity bias
- * 
- * @param {string} query - Raw search query
+ * Tier 1: MapTiler Cloud Geocoding API
+ * @param {string} query
  * @param {object} [options]
- * @param {{ latitude: number, longitude: number }} [options.proximity] - Proximity bias coordinates
- * @param {string} [options.apiKey] - Optional explicit key (defaults to import.meta.env)
  * @returns {Promise<NormalizedLocation[]>}
  */
 export async function searchMapTiler(query, options = {}) {
@@ -122,9 +173,7 @@ export async function searchMapTiler(query, options = {}) {
     (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MAPTILER_API_KEY) ||
     (typeof process !== 'undefined' && process.env?.VITE_MAPTILER_API_KEY) ||
     '';
-  if (!apiKey) {
-    return [];
-  }
+  if (!apiKey) return [];
 
   let url = `https://api.maptiler.com/geocoding/${encodeURIComponent(
     trimmed
@@ -135,10 +184,7 @@ export async function searchMapTiler(query, options = {}) {
   }
 
   const res = await fetch(url);
-  if (!res.ok) {
-    console.warn(`MapTiler Geocoding HTTP status: ${res.status}`);
-    return [];
-  }
+  if (!res.ok) return [];
 
   const data = await res.json();
   if (!data.features || !Array.isArray(data.features) || data.features.length === 0) {
@@ -149,17 +195,44 @@ export async function searchMapTiler(query, options = {}) {
 }
 
 /**
- * Fallback Geocoder: Smart Open-Meteo Geocoding with Multi-Token Ranking
- * 
+ * Tier 2: Photon by Komoot (100% Free, Zero-Account, Open-Source Geocoder over OpenStreetMap)
  * Features:
- * 1. Tokenizes compound queries (e.g. "Mohanpur, Gamharia, Jharkhand")
- * 2. Fetches count=10 candidates
- * 3. Multi-criteria ranking:
- *    - Exact string match
- *    - Contextual state/admin1 match
- *    - Feature code classification (region vs major city vs hamlet)
- *    - Population weighting
+ * - Native OpenSearch fuzzy matching
+ * - Supports compound address queries (e.g. "Mohanpur, Gamharia, Jharkhand")
+ * - Proximity biasing via lat & lon
  * 
+ * @param {string} query
+ * @param {object} [options]
+ * @returns {Promise<NormalizedLocation[]>}
+ */
+export async function searchPhoton(query, options = {}) {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  try {
+    let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(trimmed)}&limit=10`;
+
+    if (options.proximity && typeof options.proximity.latitude === 'number' && typeof options.proximity.longitude === 'number') {
+      url += `&lat=${options.proximity.latitude}&lon=${options.proximity.longitude}`;
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    if (!data.features || !Array.isArray(data.features) || data.features.length === 0) {
+      return [];
+    }
+
+    return data.features.map(normalizePhotonFeature);
+  } catch (err) {
+    console.warn('Photon geocoding notice:', err);
+    return [];
+  }
+}
+
+/**
+ * Tier 3: Smart Open-Meteo Geocoding with Multi-Token Ranking
  * @param {string} query
  * @returns {Promise<NormalizedLocation[]>}
  */
@@ -167,12 +240,10 @@ export async function searchOpenMeteo(query) {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  // Parse comma-separated compound tokens
   const tokens = trimmed.split(',').map((t) => t.trim()).filter(Boolean);
   const primaryToken = tokens[0];
   const contextTokens = tokens.slice(1).map((t) => t.toLowerCase());
 
-  // Helper to fetch and score a specific token against Open-Meteo
   async function fetchAndScore(token) {
     try {
       const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
@@ -189,31 +260,22 @@ export async function searchOpenMeteo(query) {
         const itemName = (item.name || '').toLowerCase();
         const queryLower = token.toLowerCase();
 
-        // 1. Exact name match
         if (itemName === queryLower) {
           score += 35;
         } else if (itemName.includes(queryLower) || queryLower.includes(itemName)) {
           score += 15;
         }
 
-        // 2. Context tokens match (admin1, admin2, country)
         const itemAdmin1 = (item.admin1 || '').toLowerCase();
         const itemAdmin2 = (item.admin2 || '').toLowerCase();
         const itemCountry = (item.country || '').toLowerCase();
 
         contextTokens.forEach((ctx) => {
-          if (itemAdmin1.includes(ctx) || ctx.includes(itemAdmin1)) {
-            score += 40;
-          }
-          if (itemAdmin2.includes(ctx) || ctx.includes(itemAdmin2)) {
-            score += 25;
-          }
-          if (itemCountry.includes(ctx) || ctx.includes(itemCountry)) {
-            score += 15;
-          }
+          if (itemAdmin1.includes(ctx) || ctx.includes(itemAdmin1)) score += 40;
+          if (itemAdmin2.includes(ctx) || ctx.includes(itemAdmin2)) score += 25;
+          if (itemCountry.includes(ctx) || ctx.includes(itemCountry)) score += 15;
         });
 
-        // 3. Feature code weighting (prefer state capitals / major cities over unpopulated hamlets)
         if (item.feature_code === 'ADM1' || item.feature_code === 'PCLI') {
           score += 30;
         } else if (['PPLC', 'PPLA', 'PPLA2'].includes(item.feature_code)) {
@@ -222,23 +284,19 @@ export async function searchOpenMeteo(query) {
           score += 10;
         }
 
-        // 4. Population weighting (log scale)
         if (typeof item.population === 'number' && item.population > 0) {
           score += Math.min(25, Math.log10(item.population) * 4);
         }
 
         return { item, score };
       });
-    } catch (err) {
-      console.warn('Open-Meteo fallback fetch notice:', err);
+    } catch {
       return [];
     }
   }
 
-  // First try primary token
   let scoredList = await fetchAndScore(primaryToken);
 
-  // If compound query and primary token had 0 matches or poor matches, try secondary token (e.g. "Gamharia")
   if (tokens.length > 1 && (scoredList.length === 0 || Math.max(...scoredList.map((s) => s.score)) < 70)) {
     const secondaryList = await fetchAndScore(tokens[1]);
     scoredList = [...scoredList, ...secondaryList];
@@ -246,31 +304,81 @@ export async function searchOpenMeteo(query) {
 
   if (scoredList.length === 0) return [];
 
-  // Sort descending by score
   scoredList.sort((a, b) => b.score - a.score);
 
-  // Deduplicate by proximity (lat/lon within 0.05 deg)
   const deduplicated = [];
   scoredList.forEach(({ item, score }) => {
     const exists = deduplicated.some(
       (d) => Math.abs(d.item.latitude - item.latitude) < 0.05 && Math.abs(d.item.longitude - item.longitude) < 0.05
     );
-    if (!exists) {
-      deduplicated.push({ item, score });
-    }
+    if (!exists) deduplicated.push({ item, score });
   });
 
   return deduplicated.slice(0, 8).map(({ item, score }) => normalizeOpenMeteoResult(item, score));
 }
 
 /**
- * Unified Location Search Engine
+ * Tier 4: Smart Parent City Token Fallback
+ * Handles sub-localities (e.g. "Burmamines Jamshedpur" or "Bhuiyadih Jamshedpur") where
+ * the local colony has no standalone weather station, but the parent city is recognized.
  * 
- * Pipeline:
- * 1. Queries PRIMARY provider (MapTiler Cloud Geocoding API with POI support)
- * 2. Filters out low-confidence fuzzy matches (relevance < 0.65)
- * 3. If no strong results found or MapTiler fails, queries FALLBACK (Open-Meteo smart ranker)
- * 4. Returns array of NormalizedLocation candidates
+ * @param {string} query
+ * @param {object} [options]
+ * @returns {Promise<NormalizedLocation[]>}
+ */
+export async function searchParentCityFallback(query, options = {}) {
+  const trimmed = query.trim();
+  const tokens = trimmed.split(/[\s,]+/).filter((t) => t.length >= 3);
+  if (tokens.length <= 1) return [];
+
+  // Check tokens from right to left (e.g., "Jamshedpur" in "Burmamines Jamshedpur")
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const candidateCity = tokens[i];
+    // Skip words that are generic suffixes
+    if (['road', 'street', 'main', 'east', 'west', 'north', 'south'].includes(candidateCity.toLowerCase())) {
+      continue;
+    }
+
+    try {
+      const photonResults = await searchPhoton(candidateCity, options);
+      const top = photonResults.find(
+        (r) => ['municipality', 'region', 'place'].includes(r.type) && r.name.toLowerCase() === candidateCity.toLowerCase()
+      );
+
+      if (top) {
+        const localityName = tokens.slice(0, i).join(' ');
+        const compositeName = localityName ? `${localityName}, ${top.name}` : top.name;
+        return [
+          {
+            id: `parent_${top.id}`,
+            name: compositeName,
+            fullName: `${compositeName}, ${top.admin1 ? `${top.admin1}, ` : ''}${top.country}`,
+            latitude: top.latitude,
+            longitude: top.longitude,
+            country: top.country,
+            countryCode: top.countryCode,
+            admin1: top.admin1,
+            admin2: top.admin2,
+            type: 'locality',
+            relevance: 0.88,
+          },
+        ];
+      }
+    } catch {
+      // Continue to next token
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Unified Location Search Engine
+ * Cascades through:
+ * 1. MapTiler Cloud Geocoding (Primary)
+ * 2. Photon by Komoot (100% Free OpenSearch over OpenStreetMap)
+ * 3. Open-Meteo Geocoding (Fallback)
+ * 4. Smart Parent City Fallback
  * 
  * @param {string} query - Location query string
  * @param {object} [options]
@@ -281,19 +389,28 @@ export async function searchLocations(query, options = {}) {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
+  // 1. TIER 1: MapTiler Geocoding
   try {
-    // 1. PRIMARY: MapTiler Geocoding
     const mapTilerResults = await searchMapTiler(trimmed, options);
-    // Filter out weak / unrelated fuzzy matches (e.g. matching 'Arka' in Russia when query is complex)
-    const strongMapTiler = mapTilerResults.filter((r) => r.relevance >= 0.65);
+    const strongMapTiler = mapTilerResults.filter((r) => r.relevance >= 0.7);
     if (strongMapTiler.length > 0) {
       return strongMapTiler;
     }
   } catch (err) {
-    console.warn('MapTiler geocoding notice, proceeding to fallback:', err);
+    console.warn('MapTiler geocoding notice, proceeding to Photon:', err);
   }
 
-  // 2. FALLBACK: Open-Meteo Geocoding
+  // 2. TIER 2: Photon by Komoot (100% Free OpenSearch OSM Geocoder)
+  try {
+    const photonResults = await searchPhoton(trimmed, options);
+    if (photonResults.length > 0) {
+      return photonResults;
+    }
+  } catch (err) {
+    console.warn('Photon fallback geocoding notice:', err);
+  }
+
+  // 3. TIER 3: Open-Meteo Geocoding
   try {
     const openMeteoResults = await searchOpenMeteo(trimmed);
     const strongOpenMeteo = openMeteoResults.filter((r) => r.relevance >= 0.5);
@@ -301,7 +418,17 @@ export async function searchLocations(query, options = {}) {
       return strongOpenMeteo;
     }
   } catch (err) {
-    console.error('Open-Meteo fallback geocoding error:', err);
+    console.warn('Open-Meteo fallback geocoding notice:', err);
+  }
+
+  // 4. TIER 4: Smart Parent City Fallback (Handles "Burmamines Jamshedpur", "Bhuiyadih Jamshedpur")
+  try {
+    const parentCityResults = await searchParentCityFallback(trimmed, options);
+    if (parentCityResults.length > 0) {
+      return parentCityResults;
+    }
+  } catch (err) {
+    console.warn('Parent city fallback notice:', err);
   }
 
   return [];
@@ -339,14 +466,21 @@ export async function resolveLocation(query, options = {}) {
     isSecondSubPoi &&
     (top.name.toLowerCase() === queryLower || top.fullName.toLowerCase().startsWith(queryLower));
 
-  // Ambiguity Check 1: Multiple candidates share the exact same short name (e.g. "Springfield", "Cambridge", "Mohanpur")
-  const shareSameName = top.name.toLowerCase() === second.name.toLowerCase();
+  // Check if candidates with the same name are actually the same metropolitan city (within ~15km)
+  const isSameMetroArea =
+    Math.abs(top.latitude - second.latitude) < 0.15 &&
+    Math.abs(top.longitude - second.longitude) < 0.15;
 
-  // Ambiguity Check 2: Runner-up candidate is also a very strong match (within 0.15 relevance of top)
-  const isCloseMatch = Math.abs(top.relevance - (second.relevance || 0)) < 0.15;
+  // Ambiguity Check 1: Multiple candidates share the exact same short name in DIFFERENT regions
+  const shareSameNameDifferentPlaces =
+    top.name.toLowerCase() === second.name.toLowerCase() && !isSameMetroArea;
 
-  // If candidates are ambiguous and not just a city vs its railway station, require user selection
-  if (!isSubFacility && (shareSameName || isCloseMatch)) {
+  // Ambiguity Check 2: Runner-up candidate is in a different location with close relevance
+  const isCloseMatchDifferentPlaces =
+    Math.abs(top.relevance - (second.relevance || 0)) < 0.15 && !isSameMetroArea;
+
+  // If candidates are truly ambiguous between different locations, require user selection
+  if (!isSubFacility && (shareSameNameDifferentPlaces || isCloseMatchDifferentPlaces)) {
     return { directMatch: null, candidates };
   }
 
@@ -386,7 +520,21 @@ export async function reverseGeocodeLocation(latitude, longitude) {
     }
   }
 
-  // 2. Fallback to BigDataCloud client reverse geocoding
+  // 2. Try Photon Reverse Geocoding (100% Free OpenStreetMap)
+  try {
+    const url = `https://photon.komoot.io/reverse?lon=${longitude}&lat=${latitude}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.features && data.features.length > 0) {
+        return normalizePhotonFeature(data.features[0]);
+      }
+    }
+  } catch (err) {
+    console.warn('Photon reverse geocode notice:', err);
+  }
+
+  // 3. Fallback to BigDataCloud client reverse geocoding
   try {
     const res = await fetch(
       `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
@@ -412,7 +560,7 @@ export async function reverseGeocodeLocation(latitude, longitude) {
     console.warn('BigDataCloud reverse geocode notice:', err);
   }
 
-  // Final graceful fallback
+  // Final fallback
   return {
     id: `gps_${latitude.toFixed(4)}_${longitude.toFixed(4)}`,
     name: 'GPS Location',
