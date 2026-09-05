@@ -104,3 +104,30 @@ export function getHeroGradient(condition = 'Clear', isDay = true) {
   }
 }
 
+/**
+ * Returns weather condition emoji for map markers and tooltips
+ * @param {string} condition - Weather condition string
+ * @returns {string} Emoji icon
+ */
+export function getWeatherEmoji(condition = 'Clear') {
+  switch (condition) {
+    case 'Clear':
+      return '☀️';
+    case 'Clouds':
+      return '⛅';
+    case 'Rain':
+      return '🌧️';
+    case 'Drizzle':
+      return '🌦️';
+    case 'Thunderstorm':
+      return '⛈️';
+    case 'Snow':
+      return '❄️';
+    case 'Fog':
+      return '🌫️';
+    default:
+      return '⛅';
+  }
+}
+
+

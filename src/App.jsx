@@ -9,9 +9,12 @@ import WeatherMetricsGrid from './components/WeatherMetricsGrid';
 import LoadingSkeleton from './components/LoadingSkeleton';
 import ErrorAlert from './components/ErrorAlert';
 import CityManagementModal from './components/CityManagementModal';
+import WeatherMap from './components/WeatherMap';
 import {
   getCompleteWeatherReport,
   getCompleteWeatherReportByCoords,
+  DEFAULT_FAVORITE_CITIES,
+  fetchLiveWeatherForCities,
 } from './services/weatherService';
 
 /**
@@ -36,6 +39,37 @@ export default function App() {
   const [currentCity, setCurrentCity] = useState('New Delhi');
   const [tempUnit, setTempUnit] = useState('C');
   const [isCityModalOpen, setIsCityModalOpen] = useState(false);
+
+  // Persistent Favorites state (identity & coordinates only)
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const saved = localStorage.getItem('weatherhub_favorites');
+      if (!saved) return DEFAULT_FAVORITE_CITIES;
+      const parsed = JSON.parse(saved);
+      return parsed.map((item) => ({
+        id: item.id || `${item.name.toLowerCase().replace(/\s+/g, '_')}`,
+        name: item.name,
+        latitude: item.latitude ?? (item.name === 'Musari Kudar' ? 22.75 : item.name === 'Jamshedpur' ? 22.8046 : 28.6139),
+        longitude: item.longitude ?? (item.name === 'Musari Kudar' ? 86.15 : item.name === 'Jamshedpur' ? 86.2029 : 77.209),
+        country: item.country || 'India',
+        admin1: item.admin1 || '',
+      }));
+    } catch {
+      return DEFAULT_FAVORITE_CITIES;
+    }
+  });
+
+  const [favoritesWeather, setFavoritesWeather] = useState({});
+
+  // Sync favorites to localStorage and fetch live weather on-demand
+  useEffect(() => {
+    localStorage.setItem('weatherhub_favorites', JSON.stringify(favorites));
+    if (favorites.length > 0) {
+      fetchLiveWeatherForCities(favorites).then((res) => {
+        setFavoritesWeather((prev) => ({ ...prev, ...res }));
+      });
+    }
+  }, [favorites]);
 
   // ==========================================
   // 2. ASYNCHRONOUS DATA FETCHING
@@ -183,7 +217,21 @@ export default function App() {
               onLocateMe={handleLocateMe}
             />
 
-            {/* 2. Signature Feature: Smooth Draggable 24-Hour Temperature Wave Curve */}
+            {/* 2. Interactive Weather Map */}
+            <WeatherMap
+              latitude={weatherData.location.latitude}
+              longitude={weatherData.location.longitude}
+              cityName={weatherData.location.name}
+              weather={weatherData}
+              unit={tempUnit}
+              favorites={favorites}
+              favoritesWeather={favoritesWeather}
+              onSelectCity={handleSearch}
+              onLocateMe={handleLocateMe}
+              isLocating={isLocating}
+            />
+
+            {/* 3. Signature Feature: Smooth Draggable 24-Hour Temperature Wave Curve */}
             <div className="glass-card rounded-3xl p-4 sm:p-6 border border-white/10 shadow-2xl backdrop-blur-xl">
               <div className="flex items-center justify-between px-2 mb-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
@@ -200,7 +248,7 @@ export default function App() {
               />
             </div>
 
-            {/* 3. Lower Section: Up to 14-Day Extended Daily Forecast + Air Quality Index */}
+            {/* 4. Lower Section: Up to 14-Day Extended Daily Forecast + Air Quality Index */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
               {/* Left Column: Extended Daily Predictions (Up to 14 Days) */}
               <ForecastCard forecast={weatherData.forecast} unit={tempUnit} />
@@ -209,7 +257,7 @@ export default function App() {
               <AirQualityCard airQuality={weatherData.airQuality} />
             </div>
 
-            {/* 4. Atmospheric Metrics Grid (Wind Compass, UV Index, Pressure, Sunrise/Sunset) */}
+            {/* 5. Atmospheric Metrics Grid (Wind Compass, UV Index, Pressure, Sunrise/Sunset) */}
             <WeatherMetricsGrid
               current={weatherData.current}
               todayExtremes={weatherData.todayExtremes}
@@ -227,6 +275,10 @@ export default function App() {
         onSelectCity={handleSearch}
         currentCity={currentCity}
         unit={tempUnit}
+        favorites={favorites}
+        setFavorites={setFavorites}
+        externalLiveWeather={favoritesWeather}
+        onUpdateLiveWeather={(newData) => setFavoritesWeather((prev) => ({ ...prev, ...newData }))}
       />
 
     </div>

@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   CloudSun,
-  Clock,
   RefreshCw,
   MapPin,
   LocateFixed,
   Bookmark,
-  Sparkles,
   Loader2,
 } from 'lucide-react';
 

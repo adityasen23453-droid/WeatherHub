@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wind, ShieldAlert, HeartPulse, Info } from 'lucide-react';
+import { Wind, HeartPulse } from 'lucide-react';
 
 /**
  * AirQualityCard Component

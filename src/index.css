@@ -82,4 +82,54 @@
   animation: floatSlow 4s ease-in-out infinite;
 }
 
+/* MapLibre GL Dark UI Theme Integration */
+.weather-map-popup .maplibregl-popup-content {
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 1rem !important;
+}
+
+.weather-map-popup .maplibregl-popup-tip {
+  border-top-color: rgba(15, 23, 42, 0.95) !important;
+}
+
+.weather-map-popup .maplibregl-popup-close-button {
+  color: #94a3b8 !important;
+  padding: 6px 10px !important;
+  font-size: 16px !important;
+  border-top-right-radius: 1rem !important;
+}
+
+.weather-map-popup .maplibregl-popup-close-button:hover {
+  color: #ffffff !important;
+  background: transparent !important;
+}
+
+.maplibregl-ctrl-group {
+  background: rgba(15, 23, 42, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 0.75rem !important;
+  overflow: hidden !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+}
+
+.maplibregl-ctrl-group button {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.maplibregl-ctrl-group button:last-child {
+  border-bottom: none !important;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+.maplibregl-ctrl-icon {
+  filter: invert(1) brightness(1.8) !important;
+}
+
+
 

@@ -14,6 +14,11 @@
 WeatherHub delivers real-time meteorological intelligence, air quality analysis, and extended multi-day trajectories with a clean, decoupled architecture:
 
 * **⚡ Real-Time Weather Engine**: Fetches current temperature, feels-like temperature, precipitation, humidity, pressure, wind direction with compass orientation, and day/night status.
+* **🗺️ Interactive MapLibre GL Weather Map**: High-performance vector map engine powered by **MapLibre GL JS** and **MapTiler** vector tiles:
+  * **Weather-Aware City Markers**: Custom dynamic bubble displaying live temperature, weather condition emojis (☀️, ⛅, 🌧️, ⛈️), city name, feels-like temperature, and pulsing radar ring.
+  * **Click-to-Sync Favorite Markers**: Saved favorite cities appear on the map with gold badges; clicking any favorite marker switches the dashboard and flies the map camera directly to that city without page reloads.
+  * **Multi-Style Switcher**: Toggle between **Dark Matter**, **Streets**, **Satellite Hybrid**, and open-source **OpenStreetMap** layers.
+  * **Map Controls & Fullscreen**: Integrated zoom buttons, center on selected city, live GPS locate, and responsive expandable/fullscreen modes.
 * **🎯 Live GPS Geolocation**: 1-click real-time device GPS location lookup with client-side reverse geocoding via BigDataCloud to identify exact localities.
 * **📑 Favorite Cities & City Management**:
   * **Separation of Concerns**: Persistent `localStorage` strictly stores city geographic identities (`{ name, latitude, longitude, country, admin1 }`).
@@ -40,12 +45,13 @@ WeatherHub delivers real-time meteorological intelligence, air quality analysis,
 ### 1. Main Dashboard Pipeline
 ```mermaid
 flowchart LR
-    User[👤 User Types City or GPS] --> SearchBar[SearchBar / GPS Controller]
-    SearchBar -->|Geocoding / Reverse Geocode| Coords[Lat & Long Coordinates]
+    User[👤 User Types City, GPS, or Clicks Map Pin] --> SearchBar[SearchBar / Map / GPS Controller]
+    SearchBar -->|Geocoding / Direct Coords| Coords[Lat & Long Coordinates]
     Coords -->|Async Parallel Fetch| APIs[Open-Meteo & Air Quality APIs]
     APIs -->|Composite JSON| Parser[Data Normalizer & WMO Mapper]
     Parser -->|Reactive State| AppState[React 19 State: useState]
     AppState -->|Hero Card| CurrentWeather[CurrentWeatherCard]
+    AppState -->|MapLibre GL JS + MapTiler| Map[WeatherMap Component]
     AppState -->|24h Bezier Wave| Wave[HourlyTemperatureWave]
     AppState -->|14-Day Outlook| Forecast[ForecastCard]
     AppState -->|AQI Gauge & Pollutants| AQI[AirQualityCard]
@@ -86,6 +92,7 @@ weather-hub/
 │   │   ├── Navbar.jsx               # Floating header with glowing border line & GPS
 │   │   ├── SearchBar.jsx            # City search input with live location chip
 │   │   ├── CurrentWeatherCard.jsx   # Hero card with massive temp & condition
+│   │   ├── WeatherMap.jsx           # Interactive MapLibre GL JS + MapTiler map
 │   │   ├── HourlyTemperatureWave.jsx# 24-hour cubic bezier draggable wave chart
 │   │   ├── ForecastCard.jsx         # 14-day extended daily forecast scroll list
 │   │   ├── AirQualityCard.jsx       # US EPA AQI gauge, progress meter & pollutants
@@ -151,14 +158,25 @@ weather-hub/
    npm install
    ```
 
-3. **Start local development server:**
+3. **Configure environment (Optional for MapTiler styles):**
+   ```bash
+   cp .env.example .env
+   ```
+   Add your free MapTiler API key from [cloud.maptiler.com](https://cloud.maptiler.com/):
+   ```env
+   VITE_MAPTILER_API_KEY=your_key_here
+   ```
+   *(Note: The map also includes a 1-click fallback to public OpenStreetMap tiles if no key is configured).*
+
+4. **Start local development server:**
    ```bash
    npm run dev
    ```
    Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-4. **Build for production:**
+5. **Build for production:**
    ```bash
    npm run build
    ```
+
 

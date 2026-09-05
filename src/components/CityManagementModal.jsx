@@ -44,11 +44,15 @@ export default function CityManagementModal({
   onSelectCity,
   currentCity,
   unit = 'C',
+  favorites: propFavorites,
+  setFavorites: propSetFavorites,
+  externalLiveWeather,
+  onUpdateLiveWeather,
 }) {
   // =========================================================================
-  // 1. PERSISTENT FAVORITES STATE (STRICTLY IDENTITY / COORDINATES ONLY)
+  // 1. PERSISTENT FAVORITES STATE (LIFTED OR FALLBACK TO LOCAL)
   // =========================================================================
-  const [favorites, setFavorites] = useState(() => {
+  const [internalFavorites, setInternalFavorites] = useState(() => {
     try {
       const saved = localStorage.getItem('weatherhub_favorites');
       if (!saved) return DEFAULT_FAVORITE_CITIES;
@@ -68,10 +72,16 @@ export default function CityManagementModal({
     }
   });
 
+  const favorites = propFavorites || internalFavorites;
+  const setFavorites = propSetFavorites || setInternalFavorites;
+
   // =========================================================================
   // 2. LIVE ON-DEMAND WEATHER STATE (FETCHED FROM API, NEVER STORED IN LOCALSTORAGE)
   // =========================================================================
-  const [liveWeatherMap, setLiveWeatherMap] = useState({});
+  const [internalLiveWeather, setInternalLiveWeather] = useState({});
+  const liveWeatherMap = externalLiveWeather || internalLiveWeather;
+  const setLiveWeatherMap = onUpdateLiveWeather || setInternalLiveWeather;
+
   const [isLoadingLive, setIsLoadingLive] = useState(false);
 
   // Search input state
@@ -107,7 +117,7 @@ export default function CityManagementModal({
     } finally {
       setIsLoadingLive(false);
     }
-  }, []);
+  }, [setLiveWeatherMap]);
 
   // Fetch live weather when modal opens
   useEffect(() => {
